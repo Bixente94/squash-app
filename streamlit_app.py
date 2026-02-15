@@ -68,44 +68,44 @@ jeux_j2 = sum(1 for i in range(len(scores_j1)) if scores_j2[i] > scores_j1[i])
 if (jeux_j1 == 3 or jeux_j2 == 3):
     vrai_vainqueur = j1_select if jeux_j1 == 3 else j2_select
     st.balloons()
-    st.success(f"🏆 Victoire de {vrai_vainqueur} ({max(jeux_j1, jeux_j2)} - {min(jeux_j1, jeux_j2)})")
     
+    # --- TABLEAU RÉCAPITULATIF ---
+    st.write("### 🔍 Vérification des scores")
+    recap_data = {
+        "Set": [f"Set {i+1}" for i in range(len(scores_j1))],
+        j1_select: scores_j1,
+        j2_select: scores_j2
+    }
+    st.table(recap_data)
+    st.info(f"Résultat final : **{jeux_j1} - {jeux_j2}** pour **{vrai_vainqueur}**")
+    # ------------------------------
+
     if st.button("Confirmer et envoyer les scores"):
         try:
             ws = spreadsheet.worksheet(journee)
             all_cells = ws.get_all_values()
             trouve = False
             
-            # On cherche le match dans la colonne B (index 1)
             for idx, row in enumerate(all_cells):
                 nom_j1 = j1_select.split(" ")[0].upper()
                 nom_j2 = j2_select.split(" ")[0].upper()
                 
-                # Si on trouve l'un des deux joueurs
                 if nom_j1 in row[1].upper() or nom_j2 in row[1].upper():
-                    # On vérifie si le voisin (ligne +1 ou -1) est l'adversaire
-                    # pour être sûr d'être dans le bon bloc de match
                     voisin_index = idx + 1 if idx + 1 < len(all_cells) else idx - 1
                     nom_voisin = all_cells[voisin_index][1].upper()
                     
                     if nom_j1 in nom_voisin or nom_j2 in nom_voisin:
-                        # ON A TROUVÉ LE MATCH !
-                        # On remplit la ligne actuelle (idx + 1 pour gspread)
-                        # en fonction du joueur qui occupe cette ligne précise
                         if nom_j1 in row[1].upper():
-                            sc_ligne_actuelle = scores_j1
-                            sc_ligne_voisine = scores_j2
+                            sc_ligne_actuelle, sc_ligne_voisine = scores_j1, scores_j2
                         else:
-                            sc_ligne_actuelle = scores_j2
-                            sc_ligne_voisine = scores_j1
+                            sc_ligne_actuelle, sc_ligne_voisine = scores_j2, scores_j1
                             
-                        # Mise à jour des scores (Colonnes D à H -> index 4 à 8)
                         for g_idx in range(len(scores_j1)):
                             ws.update_cell(idx + 1, 4 + g_idx, sc_ligne_actuelle[g_idx])
                             ws.update_cell(voisin_index + 1, 4 + g_idx, sc_ligne_voisine[g_idx])
                         
                         trouve = True
-                        st.success("✅ Les scores ont été mis à jour dans ton fichier Excel !")
+                        st.success("✅ Scores enregistrés ! Ton classement sera mis à jour automatiquement.")
                         break
             
             if not trouve:

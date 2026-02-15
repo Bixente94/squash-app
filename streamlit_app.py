@@ -15,7 +15,7 @@ SHEET_ID = "1VxmG8Pw0-zmnox6EwYWO74mL4Wk71MQTC9D4ajPhvNA"
 DRIVE_FOLDER_ID = "1BTNIJpsZz_ndUlHzd8ikaASoFN5-VUD3"
 spreadsheet = client.open_by_key(SHEET_ID)
 
-# --- FONCTIONS VISUELLES ---
+# --- FONCTIONS VISUELLES (FLASH) ---
 def flash_screen(color):
     hex_color = "#2ecc71" if color == "green" else "#e74c3c"
     flash_html = f"""
@@ -25,12 +25,50 @@ def flash_screen(color):
     """
     st.components.v1.html(flash_html, height=0)
 
-# --- FONCTIONS DRIVE ---
+# --- FONCTION DRIVE (SOLUTION 1 : TRANSFERT DE PROPRIÉTÉ) ---
 def upload_to_drive(file, filename):
     service = build('drive', 'v3', credentials=creds)
-    file_metadata = {'name': filename, 'parents': [DRIVE_FOLDER_ID]}
+    
+    file_metadata = {
+        'name': filename,
+        'parents': [DRIVE_FOLDER_ID]
+    }
     media = MediaIoBaseUpload(io.BytesIO(file.getvalue()), mimetype='image/jpeg')
-    uploaded_file = service.files().create(body=file_metadata, media_body=media, fields='id, webViewLink', supportsAllDrives=True).execute()
+    
+    # 1. Création du fichier par le robot
+    uploaded_file = service.files().create(
+        body=file_metadata, 
+        media_body=media, 
+        fields='id, webViewLink',
+        supportsAllDrives=True
+    ).execute()
+    
+    file_id = uploaded_file.get('id')
+
+    # 2. Transfert immédiat vers ton quota personnel
+    try:
+        user_permission = {
+            'type': 'user',
+            'role': 'owner',
+            'emailAddress': 'bixente.barnetche@gmail.com' # <--- METS TON EMAIL ICI
+        }
+        service.permissions().create(
+            fileId=file_id,
+            body=user_permission,
+            transferOwnership=True, # Déplace le fichier sur TON quota
+            supportsAllDrives=True
+        ).execute()
+    except Exception as e:
+        # Si 'owner' échoue (souvent car Gmail gratuit), on met 'writer' pour au moins partager
+        try:
+            service.permissions().create(
+                fileId=file_id,
+                body={'type': 'user', 'role': 'writer', 'emailAddress': 'TON_EMAIL@gmail.com'},
+                supportsAllDrives=True
+            ).execute()
+        except:
+            pass
+
     return uploaded_file.get('webViewLink')
 
 # --- FONCTIONS SHEETS ---
@@ -78,7 +116,7 @@ st.divider()
 uploaded_photo = st.file_uploader("📸 Photo de la feuille de match (Optionnel)", type=['jpg', 'jpeg', 'png'])
 st.divider()
 
-# CALCULS (CORRIGÉS)
+# CALCULS
 jeux_j1 = sets_j1
 jeux_j2 = sum(1 for i in range(len(scores_j1)) if scores_j2[i] > scores_j1[i])
 
@@ -91,41 +129,4 @@ if (jeux_j1 == 3 or jeux_j2 == 3):
 
     if st.button("Confirmer et envoyer les scores"):
         try:
-            match_trouve = False
-            with st.spinner('Envoi en cours...'):
-                link_photo = upload_to_drive(uploaded_photo, f"{j1_select}_{j2_select}.jpg") if uploaded_photo else ""
-
-                for i in range(1, 10):
-                    ws = spreadsheet.worksheet(f"J{i}")
-                    all_cells = ws.get_all_values()
-                    for idx, row in enumerate(all_cells):
-                        n1, n2 = j1_select.split(" ")[0].upper(), j2_select.split(" ")[0].upper()
-                        if n1 in row[1].upper() or n2 in row[1].upper():
-                            v_idx = idx + 1 if idx + 1 < len(all_cells) else idx - 1
-                            if n1 in all_cells[v_idx][1].upper() or n2 in all_cells[v_idx][1].upper():
-                                match_trouve = True
-                                if row[3].strip() not in ["", "0"]:
-                                    flash_screen("red")
-                                    st.error("❌ Score déjà présent.")
-                                    st.stop()
-                                
-                                s_actu, s_voisin = (scores_j1, scores_j2) if n1 in row[1].upper() else (scores_j2, scores_j1)
-                                for g_idx in range(len(scores_j1)):
-                                    ws.update_cell(idx + 1, 4 + g_idx, s_actu[g_idx])
-                                    ws.update_cell(v_idx + 1, 4 + g_idx, s_voisin[g_idx])
-                                if link_photo:
-                                    ws.update_cell(idx + 1, 16, link_photo)
-                                    ws.update_cell(v_idx + 1, 16, link_photo)
-                                
-                                flash_screen("green")
-                                st.success(f"✅ Enregistré dans J{i} !")
-                                break
-                    if match_trouve: break
-            if not match_trouve:
-                flash_screen("red")
-                st.error("Match non trouvé.")
-        except Exception as e:
-            flash_screen("red")
-            st.error(f"Erreur : {e}")
-else:
-    st.info("Saisissez 3 sets gagnants pour envoyer.")
+            match_trou

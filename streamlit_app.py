@@ -25,51 +25,34 @@ def flash_screen(color):
     """
     st.components.v1.html(flash_html, height=0)
 
-# --- FONCTION DRIVE (SOLUTION 1 : TRANSFERT DE PROPRIÉTÉ) ---
+# --- FONCTION DRIVE (AVEC TRANSFERT DE PROPRIÉTÉ) ---
 def upload_to_drive(file, filename):
     service = build('drive', 'v3', credentials=creds)
-    
-    file_metadata = {
-        'name': filename,
-        'parents': [DRIVE_FOLDER_ID]
-    }
+    file_metadata = {'name': filename, 'parents': [DRIVE_FOLDER_ID]}
     media = MediaIoBaseUpload(io.BytesIO(file.getvalue()), mimetype='image/jpeg')
     
-    # 1. Création du fichier par le robot
-    uploaded_file = service.files().create(
-        body=file_metadata, 
-        media_body=media, 
-        fields='id, webViewLink',
-        supportsAllDrives=True
-    ).execute()
-    
-    file_id = uploaded_file.get('id')
+    # 1. Création du fichier
+    up = service.files().create(body=file_metadata, media_body=media, fields='id, webViewLink', supportsAllDrives=True).execute()
+    f_id = up.get('id')
 
-    # 2. Transfert immédiat vers ton quota personnel
+    # 2. Transfert de propriété vers ton email pour le quota
     try:
-        user_permission = {
-            'type': 'user',
-            'role': 'owner',
-            'emailAddress': 'bixente.barnetche@gmail.com' # <--- METS TON EMAIL ICI
-        }
         service.permissions().create(
-            fileId=file_id,
-            body=user_permission,
-            transferOwnership=True, # Déplace le fichier sur TON quota
+            fileId=f_id,
+            body={'type': 'user', 'role': 'owner', 'emailAddress': 'bixente.barnetche@gmail.com'},
+            transferOwnership=True,
             supportsAllDrives=True
         ).execute()
-    except Exception as e:
-        # Si 'owner' échoue (souvent car Gmail gratuit), on met 'writer' pour au moins partager
+    except:
+        # Si 'owner' échoue, on donne au moins les droits d'écriture
         try:
             service.permissions().create(
-                fileId=file_id,
-                body={'type': 'user', 'role': 'writer', 'emailAddress': 'TON_EMAIL@gmail.com'},
+                fileId=f_id,
+                body={'type': 'user', 'role': 'writer', 'emailAddress': 'bixente.barnetche@gmail.com'},
                 supportsAllDrives=True
             ).execute()
-        except:
-            pass
-
-    return uploaded_file.get('webViewLink')
+        except: pass
+    return up.get('webViewLink')
 
 # --- FONCTIONS SHEETS ---
 def get_liste_joueurs():
@@ -95,7 +78,6 @@ j1_select = col1.selectbox("Joueur 1", liste_joueurs)
 j2_select = col2.selectbox("Joueur 2", liste_joueurs)
 
 st.divider()
-
 scores_j1, scores_j2, sets_j1 = [], [], 0
 
 st.write("### Détails des Jeux")
@@ -103,30 +85,6 @@ for i in range(1, 6):
     c1, c2, c3 = st.columns([1, 1, 2])
     s1 = c1.number_input(f"Set {i} - {j1_select}", min_value=0, step=1, key=f"s1_{i}")
     s2 = c2.number_input(f"Set {i} - {j2_select}", min_value=0, step=1, key=f"s2_{i}")
-    
     valide, msg = verifier_jeu(s1, s2)
     if valide:
-        c3.success("Jeu valide")
-        scores_j1.append(s1); scores_j2.append(s2)
-        if s1 > s2: sets_j1 += 1
-    elif s1 > 0 or s2 > 0:
-        c3.error(msg)
-
-st.divider()
-uploaded_photo = st.file_uploader("📸 Photo de la feuille de match (Optionnel)", type=['jpg', 'jpeg', 'png'])
-st.divider()
-
-# CALCULS
-jeux_j1 = sets_j1
-jeux_j2 = sum(1 for i in range(len(scores_j1)) if scores_j2[i] > scores_j1[i])
-
-if (jeux_j1 == 3 or jeux_j2 == 3):
-    vrai_vainqueur = j1_select if jeux_j1 == 3 else j2_select
-    st.write("### 🔍 Vérification des scores")
-    recap = {"Set": [f"Set {i+1}" for i in range(len(scores_j1))], j1_select: scores_j1, j2_select: scores_j2}
-    st.table(recap)
-    st.info(f"Résultat final : **{jeux_j1} - {jeux_j2}** pour **{vrai_vainqueur}**")
-
-    if st.button("Confirmer et envoyer les scores"):
-        try:
-            match_trou
+        c3.success("Valide")

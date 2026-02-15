@@ -58,7 +58,7 @@ for i in range(1, 6):
 
 st.divider()
 
-# 3. Calculs et Validation
+# 3. Calculs et Validation (On définit les variables ICI avant de les tester)
 jeux_j1 = sets_j1
 jeux_j2 = sum(1 for i in range(len(scores_j1)) if scores_j2[i] > scores_j1[i])
 
@@ -75,10 +75,9 @@ if (jeux_j1 == 3 or jeux_j2 == 3):
     st.table(recap_data)
     st.info(f"Résultat final : **{jeux_j1} - {jeux_j2}** pour **{vrai_vainqueur}**")
 
-   if st.button("Confirmer et envoyer les scores"):
+    if st.button("Confirmer et envoyer les scores"):
         try:
             match_trouve = False
-            # Recherche automatique dans les onglets J1 à J9
             with st.spinner('Recherche du match dans le calendrier...'):
                 for i in range(1, 10):
                     nom_onglet = f"J{i}"
@@ -89,7 +88,6 @@ if (jeux_j1 == 3 or jeux_j2 == 3):
                         nom_j1 = j1_select.split(" ")[0].upper()
                         nom_j2 = j2_select.split(" ")[0].upper()
                         
-                        # On vérifie si l'un des joueurs est sur cette ligne
                         if nom_j1 in row[1].upper() or nom_j2 in row[1].upper():
                             voisin_index = idx + 1 if idx + 1 < len(all_cells) else idx - 1
                             nom_voisin = all_cells[voisin_index][1].upper()
@@ -101,7 +99,6 @@ if (jeux_j1 == 3 or jeux_j2 == 3):
                                 else:
                                     sc_ligne_actuelle, sc_ligne_voisine = scores_j2, scores_j1
                                     
-                                # Mise à jour des cellules (Colonnes D à H)
                                 for g_idx in range(len(scores_j1)):
                                     ws.update_cell(idx + 1, 4 + g_idx, sc_ligne_actuelle[g_idx])
                                     ws.update_cell(voisin_index + 1, 4 + g_idx, sc_ligne_voisine[g_idx])

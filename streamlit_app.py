@@ -31,15 +31,74 @@ def verifier_jeu(s1, s2):
 st.set_page_config(page_title="Squash Manager", page_icon="🎾")
 st.title("🏆 Enregistrement des Scores")
 
-# 1. Sélection Journée et Joueurs
+# 1. Sélection des Joueurs (plus besoin de choisir la journée !)
 liste_joueurs = get_liste_joueurs()
-journee = st.selectbox("Sélectionnez la journée", [f"J{i}" for i in range(1, 10)])
-
 col1, col2 = st.columns(2)
 j1_select = col1.selectbox("Joueur 1", liste_joueurs)
 j2_select = col2.selectbox("Joueur 2", liste_joueurs)
 
 st.divider()
+
+# ... (garder la partie saisie des scores et calcul des jeux_j1 / jeux_j2) ...
+
+if (jeux_j1 == 3 or jeux_j2 == 3):
+    vrai_vainqueur = j1_select if jeux_j1 == 3 else j2_select
+    st.balloons()
+    
+    st.write("### 🔍 Vérification des scores")
+    recap_data = {
+        "Set": [f"Set {i+1}" for i in range(len(scores_j1))],
+        j1_select: scores_j1,
+        j2_select: scores_j2
+    }
+    st.table(recap_data)
+
+    if st.button("Confirmer et envoyer les scores"):
+        try:
+            match_trouve = False
+            # On cherche dans tous les onglets de J1 à J9
+            for i in range(1, 10):
+                nom_onglet = f"J{i}"
+                ws = spreadsheet.worksheet(nom_onglet)
+                all_cells = ws.get_all_values()
+                
+                for idx, row in enumerate(all_cells):
+                    nom_j1 = j1_select.split(" ")[0].upper()
+                    nom_j2 = j2_select.split(" ")[0].upper()
+                    
+                    if nom_j1 in row[1].upper() or nom_j2 in row[1].upper():
+                        voisin_index = idx + 1 if idx + 1 < len(all_cells) else idx - 1
+                        nom_voisin = all_cells[voisin_index][1].upper()
+                        
+                        if nom_j1 in nom_voisin or nom_j2 in nom_voisin:
+                            # ON A TROUVÉ LE MATCH !
+                            # --- Vérification si déjà rempli ---
+                            # On regarde si la case du Set 1 (Colonne D / index 3) est vide ou égale à 0
+                            if row[3] and row[3] != "0" and row[3] != "":
+                                st.warning(f"⚠️ Ce match dans l'onglet {nom_onglet} semble déjà avoir un score ({row[3]}).")
+                                if not st.checkbox("Écraser le score existant ?"):
+                                    match_trouve = True
+                                    break
+
+                            # --- Remplissage ---
+                            if nom_j1 in row[1].upper():
+                                sc_ligne_actuelle, sc_ligne_voisine = scores_j1, scores_j2
+                            else:
+                                sc_ligne_actuelle, sc_ligne_voisine = scores_j2, scores_j1
+                                
+                            for g_idx in range(len(scores_j1)):
+                                ws.update_cell(idx + 1, 4 + g_idx, sc_ligne_actuelle[g_idx])
+                                ws.update_cell(voisin_index + 1, 4 + g_idx, sc_ligne_voisine[g_idx])
+                            
+                            st.success(f"✅ Match trouvé et enregistré dans l'onglet **{nom_onglet}** !")
+                            match_trouve = True
+                            break
+                if match_trouve: break # Sortir de la boucle des onglets J1-J9
+
+            if not match_trouve:
+                st.error("Impossible de trouver ce match dans les journées J1 à J9.")
+        except Exception as e:
+            st.error(f"Erreur technique : {e}")
 
 # 2. Saisie des scores
 scores_j1 = []

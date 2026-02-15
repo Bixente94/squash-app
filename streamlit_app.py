@@ -53,7 +53,6 @@ sc1, sc2, s1_w, s2_w = [], [], 0, 0
 
 st.write("### 📝 Saisie des Sets")
 
-# En-têtes pour l'alignement
 h1, h2, h3 = st.columns([2, 2, 1])
 h1.caption(f"Score {j1.split(' ')[0]}")
 h2.caption(f"Score {j2.split(' ')[0]}")
@@ -64,8 +63,18 @@ for i in range(1, 6):
     v1 = l1.number_input(f"Set {i}", 0, 30, 0, key=f"v1_{i}", label_visibility="collapsed")
     v2 = l2.number_input(f"Set {i} bis", 0, 30, 0, key=f"v2_{i}", label_visibility="collapsed")
     
-    if (v1 >= 11 or v2 >= 11) and abs(v1 - v2) >= 2:
-        l3.markdown("### ✅") # Utilisation de markdown pour un meilleur centrage vertical
+    # --- LOGIQUE DE VALIDATION SQUASH CORRIGÉE ---
+    diff = abs(v1 - v2)
+    valid_set = False
+    # Cas classique : 11 points et au moins 2 d'écart
+    if (v1 == 11 or v2 == 11) and diff >= 2:
+        valid_set = True
+    # Cas tie-break : plus de 11 points et exactement 2 d'écart (ex: 13-11)
+    elif (v1 > 11 or v2 > 11) and diff == 2:
+        valid_set = True
+        
+    if valid_set:
+        l3.markdown("### ✅")
         sc1.append(v1); sc2.append(v2)
         if v1 > v2: s1_w += 1
         else: s2_w += 1
@@ -76,7 +85,48 @@ st.divider()
 img = st.file_uploader("📸 Photo de la feuille de match (Optionnel)", type=['jpg', 'png', 'jpeg'])
 
 if s1_w == 3 or s2_w == 3:
-    win = j1 if s1_w == 3 else j2
-    st.success(f"🏆 Victoire de **{win}** par **{s1_w}** sets à **{s2_w}**")
+    # --- TABLEAU RECAPITULATIF AVANT ---
+    st.write("#### 🔍 Récapitulatif")
+    recap_dict = {
+        "Set": [f"Set {k+1}" for k in range(len(sc1))],
+        j1: sc1,
+        j2: sc2
+    }
+    st.table(recap_dict)
     
-    # --- TABLEAU RECAPITULATIF REST
+    # --- LIGNE DE VICTOIRE (ORDRE CORRIGÉ) ---
+    win = j1 if s1_w == 3 else j2
+    score_vainqueur = max(s1_w, s2_w)
+    score_perdant = min(s1_w, s2_w)
+    st.success(f"🏆 Victoire de **{win}** par **{score_vainqueur}** sets à **{score_perdant}**")
+
+    if st.button("🚀 ENVOYER LE SCORE FINAL"):
+        try:
+            with st.spinner('Enregistrement...'):
+                link = up_drive(img, f"{j1}_{j2}.jpg")
+                found = False
+                n1, n2 = j1.split(" ")[0].upper(), j2.split(" ")[0].upper()
+                for j in range(1, 10):
+                    ws = ss.worksheet(f"J{j}")
+                    data = ws.get_all_values()
+                    for idx, row in enumerate(data):
+                        if n1 in row[1].upper() or n2 in row[1].upper():
+                            v_idx = idx + 1 if (idx % 2 != 0) else idx - 1
+                            if v_idx < 0 or v_idx >= len(data): continue
+                            if n1 in data[v_idx][1].upper() or n2 in data[v_idx][1].upper():
+                                if row[3].strip() not in ["", "0"]:
+                                    flash("red"); st.error("❌ Déjà rempli !"); st.stop()
+                                found = True
+                                sa, sv = (sc1, sc2) if n1 in row[1].upper() else (sc2, sc1)
+                                for k in range(len(sc1)):
+                                    ws.update_cell(idx+1, 4+k, sa[k])
+                                    ws.update_cell(v_idx+1, 4+k, sv[k])
+                                if link:
+                                    ws.update_cell(idx+1, 16, link)
+                                    ws.update_cell(v_idx+1, 16, link)
+                                flash("green"); st.success("✅ Match enregistré !"); break
+                    if found: break
+                if not found: st.error("Match non trouvé dans le calendrier.")
+        except Exception as e: st.error(f"Erreur : {e}")
+else:
+    st.info("ℹ️ Complétez 3 sets gagnants pour débloquer l'envoi.")

@@ -39,7 +39,7 @@ j2_select = col2.selectbox("Joueur 2", liste_joueurs)
 
 st.divider()
 
-# ... (garder la partie saisie des scores et calcul des jeux_j1 / jeux_j2) ...
+# (garder la partie saisie des scores et calcul des jeux_j1 / jeux_j2)
 
 if (jeux_j1 == 3 or jeux_j2 == 3):
     vrai_vainqueur = j1_select if jeux_j1 == 3 else j2_select

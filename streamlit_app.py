@@ -1,16 +1,33 @@
 import streamlit as st 
 import gspread
 from google.oauth2.service_account import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
+import io
+from datetime import datetime
 
-# --- CONNEXION GOOGLE SHEETS ---
+# --- CONNEXION GOOGLE SERVICES ---
 scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
 client = gspread.authorize(creds)
 
-# ID de ton fichier
-spreadsheet = client.open_by_key("1VxmG8Pw0-zmnox6EwYWO74mL4Wk71MQTC9D4ajPhvNA")
+# ID du fichier Sheets et du dossier Drive
+SHEET_ID = "1VxmG8Pw0-zmnox6EwYWO74mL4Wk71MQTC9D4ajPhvNA"
+DRIVE_FOLDER_ID = "1BTNIJpsZz_ndUlHzd8ikaASoFN5-VUD3"
+spreadsheet = client.open_by_key(SHEET_ID)
 
-# --- FONCTIONS UTILES ---
+# --- FONCTIONS DRIVE ---
+def upload_to_drive(file, filename):
+    service = build('drive', 'v3', credentials=creds)
+    file_metadata = {
+        'name': filename,
+        'parents': [DRIVE_FOLDER_ID]
+    }
+    media = MediaIoBaseUpload(io.BytesIO(file.getvalue()), mimetype='image/jpeg')
+    uploaded_file = service.files().create(body=file_metadata, media_body=media, fields='id, webViewLink').execute()
+    return uploaded_file.get('webViewLink')
+
+# --- FONCTIONS SHEETS ---
 def get_liste_joueurs():
     ws = spreadsheet.worksheet("COORDONNEES")
     data = ws.get_all_values()[2:] 
@@ -58,7 +75,13 @@ for i in range(1, 6):
 
 st.divider()
 
-# 3. Calculs et Validation
+# 3. Photo (Optionnelle)
+st.write("### 📸 Preuve du score (Optionnel)")
+uploaded_photo = st.file_uploader("Prendre une photo de la feuille de match", type=['jpg', 'jpeg', 'png'])
+
+st.divider()
+
+# 4. Calculs et Validation
 jeux_j1 = sets_j1
 jeux_j2 = sum(1 for i in range(len(scores_j1)) if scores_j2[i] > scores_j1[i])
 
@@ -78,7 +101,15 @@ if (jeux_j1 == 3 or jeux_j2 == 3):
     if st.button("Confirmer et envoyer les scores"):
         try:
             match_trouve = False
-            with st.spinner('Vérification du calendrier...'):
+            with st.spinner('Vérification et envoi en cours...'):
+                
+                # A. Gestion de la photo d'abord
+                link_photo = ""
+                if uploaded_photo:
+                    filename = f"{datetime.now().strftime('%Y%m%d_%H%M')}_{j1_select}_{j2_select}.jpg".replace(" ", "_")
+                    link_photo = upload_to_drive(uploaded_photo, filename)
+
+                # B. Recherche du match dans Sheets (J1 à J9)
                 for i in range(1, 10):
                     nom_onglet = f"J{i}"
                     ws = spreadsheet.worksheet(nom_onglet)
@@ -96,31 +127,35 @@ if (jeux_j1 == 3 or jeux_j2 == 3):
                                 # MATCH TROUVÉ
                                 match_trouve = True
                                 
-                                # --- VÉRIFICATION STRICTE SI DÉJÀ REMPLI ---
-                                # On regarde si le premier set (colonne D / index 3) a déjà une valeur
-                                # (Si la case n'est pas vide et n'est pas un zéro)
+                                # Vérification si déjà rempli
                                 val_case = row[3].strip()
                                 if val_case != "" and val_case != "0":
-                                    st.error(f"❌ Erreur : Un score a déjà été enregistré pour ce match dans l'onglet {nom_onglet}. Veuillez contacter l'organisateur pour toute modification.")
+                                    st.error(f"❌ Score déjà présent dans l'onglet {nom_onglet}. Contactez l'organisateur.")
                                     st.stop()
 
-                                # --- PROCÉDURE D'ENVOI ---
+                                # Attribution des lignes
                                 if nom_j1 in row[1].upper():
                                     sc_ligne_actuelle, sc_ligne_voisine = scores_j1, scores_j2
                                 else:
                                     sc_ligne_actuelle, sc_ligne_voisine = scores_j2, scores_j1
                                     
+                                # Mise à jour Scores (Col D à H)
                                 for g_idx in range(len(scores_j1)):
                                     ws.update_cell(idx + 1, 4 + g_idx, sc_ligne_actuelle[g_idx])
                                     ws.update_cell(voisin_index + 1, 4 + g_idx, sc_ligne_voisine[g_idx])
                                 
-                                st.success(f"✅ Enregistré avec succès dans l'onglet **{nom_onglet}** !")
+                                # Inscription du lien Photo en Colonne P (16)
+                                if link_photo:
+                                    ws.update_cell(idx + 1, 16, link_photo)
+                                    ws.update_cell(voisin_index + 1, 16, link_photo)
+                                
+                                st.success(f"✅ Scores et photo enregistrés dans **{nom_onglet}** !")
                                 break
                     if match_trouve: break
 
             if not match_trouve:
-                st.error("Impossible de trouver ce match dans les journées J1 à J9.")
+                st.error("Match non trouvé dans le calendrier (J1-J9).")
         except Exception as e:
             st.error(f"Erreur technique : {e}")
 else:
-    st.info("Le bouton d'envoi apparaîtra une fois que l'un des joueurs aura gagné 3 sets.")
+    st.info("Le bouton d'envoi apparaîtra une fois les 3 sets gagnants saisis.")

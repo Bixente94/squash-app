@@ -11,7 +11,7 @@ client = gspread.authorize(creds)
 
 # Ouvre ton fichier (met le nom EXACT de ton Google Sheet ici)
 NOM_DU_FICHIER = "Championnat interne Poule 1 Phase 2" 
-spreadsheet = client.open(NOM_DU_FICHIER)
+spreadsheet = client.open_by_key(1423888656)
 
 # --- FONCTIONS UTILES ---
 def get_liste_joueurs():

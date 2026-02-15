@@ -29,15 +29,25 @@ def up_drive(file, name):
     if not file: return ""
     try:
         svc = build('drive', 'v3', credentials=creds)
+        # On s'assure que le lien sera récupérable
         meta = {'name': name, 'parents': [DRIVE_ID]}
         m = MediaIoBaseUpload(io.BytesIO(file.getvalue()), mimetype='image/jpeg')
         res = svc.files().create(body=meta, media_body=m, fields='id, webViewLink', supportsAllDrives=True).execute()
         fid = res.get('id')
-        p = {'type': 'user', 'role': 'owner', 'emailAddress': 'bixente.barnetche@gmail.com'}
-        try: svc.permissions().create(fileId=fid, body=p, transferOwnership=True, supportsAllDrives=True).execute()
-        except: svc.permissions().create(fileId=fid, body={'type':'user','role':'writer','emailAddress':'bixente.barnetche@gmail.com'}, supportsAllDrives=True).execute()
-        return res.get('webViewLink')
-    except: return ""
+        
+        # Rendre le fichier accessible pour que le lien fonctionne dans le Sheets
+        perm = {'type': 'user', 'role': 'owner', 'emailAddress': 'bixente.barnetche@gmail.com'}
+        try:
+            svc.permissions().create(fileId=fid, body=perm, transferOwnership=True, supportsAllDrives=True).execute()
+        except:
+            svc.permissions().create(fileId=fid, body={'type': 'anyone', 'role': 'viewer'}, supportsAllDrives=True).execute()
+        
+        # On récupère le lien final propre
+        final_file = svc.files().get(fileId=fid, fields='webViewLink', supportsAllDrives=True).execute()
+        return final_file.get('webViewLink')
+    except Exception as e:
+        st.warning(f"Note : La photo n'a pas pu être envoyée ({e})")
+        return ""
 
 # --- APP ---
 st.title("🏆 Scores Squash")
@@ -52,7 +62,6 @@ st.divider()
 sc1, sc2, s1_w, s2_w = [], [], 0, 0
 
 st.write("### 📝 Saisie des Sets")
-
 h1, h2, h3 = st.columns([2, 2, 1])
 h1.caption(f"Score {j1.split(' ')[0]}")
 h2.caption(f"Score {j2.split(' ')[0]}")
@@ -63,49 +72,36 @@ for i in range(1, 6):
     v1 = l1.number_input(f"Set {i}", 0, 30, 0, key=f"v1_{i}", label_visibility="collapsed")
     v2 = l2.number_input(f"Set {i} bis", 0, 30, 0, key=f"v2_{i}", label_visibility="collapsed")
     
-    # --- LOGIQUE DE VALIDATION SQUASH CORRIGÉE ---
     diff = abs(v1 - v2)
     valid_set = False
-    # Cas classique : 11 points et au moins 2 d'écart
-    if (v1 == 11 or v2 == 11) and diff >= 2:
-        valid_set = True
-    # Cas tie-break : plus de 11 points et exactement 2 d'écart (ex: 13-11)
-    elif (v1 > 11 or v2 > 11) and diff == 2:
-        valid_set = True
+    if (v1 == 11 or v2 == 11) and diff >= 2: valid_set = True
+    elif (v1 > 11 or v2 > 11) and diff == 2: valid_set = True
         
     if valid_set:
         l3.markdown("### ✅")
         sc1.append(v1); sc2.append(v2)
         if v1 > v2: s1_w += 1
         else: s2_w += 1
-    elif v1 > 0 or v2 > 0: 
-        l3.markdown("### ⏳")
+    elif v1 > 0 or v2 > 0: l3.markdown("### ⏳")
 
 st.divider()
 img = st.file_uploader("📸 Photo de la feuille de match (Optionnel)", type=['jpg', 'png', 'jpeg'])
 
 if s1_w == 3 or s2_w == 3:
-    # --- TABLEAU RECAPITULATIF AVANT ---
     st.write("#### 🔍 Récapitulatif")
-    recap_dict = {
-        "Set": [f"Set {k+1}" for k in range(len(sc1))],
-        j1: sc1,
-        j2: sc2
-    }
+    recap_dict = {"Set": [f"Set {k+1}" for k in range(len(sc1))], j1: sc1, j2: sc2}
     st.table(recap_dict)
     
-    # --- LIGNE DE VICTOIRE (ORDRE CORRIGÉ) ---
     win = j1 if s1_w == 3 else j2
-    score_vainqueur = max(s1_w, s2_w)
-    score_perdant = min(s1_w, s2_w)
-    st.success(f"🏆 Victoire de **{win}** par **{score_vainqueur}** sets à **{score_perdant}**")
+    st.success(f"🏆 Victoire de **{win}** par **{max(s1_w, s2_w)}** sets à **{min(s1_w, s2_w)}**")
 
     if st.button("🚀 ENVOYER LE SCORE FINAL"):
         try:
-            with st.spinner('Enregistrement...'):
-                link = up_drive(img, f"{j1}_{j2}.jpg")
+            with st.spinner('Envoi vers Google Sheets...'):
+                link = up_drive(img, f"{datetime.now().strftime('%Y%m%d')}_{j1}_{j2}.jpg")
                 found = False
                 n1, n2 = j1.split(" ")[0].upper(), j2.split(" ")[0].upper()
+                
                 for j in range(1, 10):
                     ws = ss.worksheet(f"J{j}")
                     data = ws.get_all_values()
@@ -116,14 +112,20 @@ if s1_w == 3 or s2_w == 3:
                             if n1 in data[v_idx][1].upper() or n2 in data[v_idx][1].upper():
                                 if row[3].strip() not in ["", "0"]:
                                     flash("red"); st.error("❌ Déjà rempli !"); st.stop()
+                                
                                 found = True
                                 sa, sv = (sc1, sc2) if n1 in row[1].upper() else (sc2, sc1)
+                                
+                                # Mise à jour des scores (Colonnes D, E, F, G, H)
                                 for k in range(len(sc1)):
                                     ws.update_cell(idx+1, 4+k, sa[k])
                                     ws.update_cell(v_idx+1, 4+k, sv[k])
+                                
+                                # Mise à jour de la photo en Colonne P (16)
                                 if link:
-                                    ws.update_cell(idx+1, 16, link)
-                                    ws.update_cell(v_idx+1, 16, link)
+                                    ws.update_cell(idx + 1, 16, link)
+                                    ws.update_cell(v_idx + 1, 16, link)
+                                
                                 flash("green"); st.success("✅ Match enregistré !"); break
                     if found: break
                 if not found: st.error("Match non trouvé dans le calendrier.")

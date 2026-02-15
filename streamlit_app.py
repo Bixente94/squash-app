@@ -45,7 +45,6 @@ def upload_to_drive(file, filename):
     file_metadata = {'name': filename, 'parents': [DRIVE_FOLDER_ID]}
     media = MediaIoBaseUpload(io.BytesIO(file.getvalue()), mimetype='image/jpeg')
     
-    # Ajout de supportsAllDrives=True pour régler l'erreur 403 de quota
     uploaded_file = service.files().create(
         body=file_metadata, 
         media_body=media, 
@@ -103,12 +102,11 @@ st.write("### 📸 Preuve du score (Optionnel)")
 uploaded_photo = st.file_uploader("Prendre une photo", type=['jpg', 'jpeg', 'png'])
 st.divider()
 
+# CALCUL DES RÉSULTATS
 jeux_j1 = sets_j1
 jeux_j2 = sum(1 for i in range(len(scores_j1)) if scores_j2[i] > scores_j1[i])
 
 if (jeux_j1 == 3 or jeux_j2 == 3):
     vrai_vainqueur = j1_select if jeux_j1 == 3 else j2_select
-    # LES BALLONS ONT ÉTÉ ENLEVÉS ICI
     
-    st.write("### 🔍 Vérification des scores")
-    recap_data = {"Set": [f"Set {i
+    st.write("###

@@ -10,7 +10,7 @@ creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"],
 client = gspread.authorize(creds)
 
 # Ouvre ton fichier (met le nom EXACT de ton Google Sheet ici)
-NOM_DU_FICHIER = "Championnat interne Poule 1  Phase 2" 
+NOM_DU_FICHIER = "Championnat interne Poule 1 Phase 2.xlsx" 
 spreadsheet = client.open(NOM_DU_FICHIER)
 
 # --- FONCTIONS UTILES ---

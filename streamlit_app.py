@@ -1,20 +1,19 @@
 import streamlit as st 
 import gspread
 from google.oauth2.service_account import Credentials
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
-import io
+import base64
 from datetime import datetime
+from PIL import Image
+import io
 
 # --- SETUP ---
 st.set_page_config(page_title="Squash Manager", page_icon="🎾")
 
 try:
-    scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+    scope = ["https://www.googleapis.com/auth/spreadsheets"]
     creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
     client = gspread.authorize(creds)
     SHEET_ID = "1VxmG8Pw0-zmnox6EwYWO74mL4Wk71MQTC9D4ajPhvNA"
-    DRIVE_ID = "1BTNIJpsZz_ndUlHzd8ikaASoFN5-VUD3"
     ss = client.open_by_key(SHEET_ID)
 except Exception as e:
     st.error(f"Erreur connexion : {e}"); st.stop()
@@ -25,38 +24,16 @@ def flash(color):
     html = f'<div style="position:fixed;top:0;left:0;width:100vw;height:100vh;background-color:{c};opacity:0.4;z-index:9999;pointer-events:none;animation:f 0.6s ease-out forwards;"></div><style>@keyframes f{{0%{{opacity:0.4;}}100%{{opacity:0;}}}}</style>'
     st.components.v1.html(html, height=0)
 
-def up_drive(file, name):
+def encode_photo(file):
     if not file: return ""
     try:
-        svc = build('drive', 'v3', credentials=creds)
-        # On définit les métadonnées : le fichier appartient au dossier parent
-        meta = {
-            'name': name, 
-            'parents': [DRIVE_ID]
-        }
-        m = MediaIoBaseUpload(io.BytesIO(file.getvalue()), mimetype='image/jpeg')
-        
-        # Création du fichier SANS transfert de propriété
-        res = svc.files().create(
-            body=meta, 
-            media_body=m, 
-            fields='id, webViewLink',
-            supportsAllDrives=True # Très important
-        ).execute()
-        
-        fid = res.get('id')
-        
-        # On rend juste le lien lisible pour que tu puisses cliquer dessus dans le Sheets
-        svc.permissions().create(
-            fileId=fid, 
-            body={'type': 'anyone', 'role': 'viewer'},
-            supportsAllDrives=True
-        ).execute()
-        
-        return res.get('webViewLink')
-    except Exception as e:
-        st.error(f"Erreur Drive détaillée : {e}")
-        return ""
+        # On réduit la taille de l'image pour ne pas faire exploser le Sheets (limite 50k caractères)
+        img = Image.open(file)
+        img.thumbnail((400, 400)) # On compresse en petit format
+        buffered = io.BytesIO()
+        img.save(buffered, format="JPEG", quality=60)
+        return base64.b64encode(buffered.getvalue()).decode()
+    except: return "Erreur encodage"
 
 # --- APP ---
 st.title("🏆 Scores Squash")
@@ -94,7 +71,7 @@ for i in range(1, 6):
     elif v1 > 0 or v2 > 0: l3.markdown("### ⏳")
 
 st.divider()
-img = st.file_uploader("📸 Photo de la feuille de match (Optionnel)", type=['jpg', 'png', 'jpeg'])
+img_file = st.file_uploader("📸 Photo (Optionnel - Stockée dans le Sheets)", type=['jpg', 'png', 'jpeg'])
 
 if s1_w == 3 or s2_w == 3:
     st.write("#### 🔍 Récapitulatif")
@@ -102,12 +79,12 @@ if s1_w == 3 or s2_w == 3:
     st.table(recap_dict)
     
     win = j1 if s1_w == 3 else j2
-    st.success(f"🏆 Victoire de **{win}** par **{max(s1_w, s2_w)}** sets à **{min(s1_w, s2_w)}**")
+    st.success(f"🏆 Victoire de **{win}** ({max(s1_w, s2_w)}-{min(s1_w, s2_w)})")
 
     if st.button("🚀 ENVOYER LE SCORE FINAL"):
         try:
-            with st.spinner('Envoi vers Google Sheets...'):
-                link = up_drive(img, f"{datetime.now().strftime('%Y%m%d')}_{j1}_{j2}.jpg")
+            with st.spinner('Enregistrement...'):
+                photo_data = encode_photo(img_file)
                 found = False
                 n1, n2 = j1.split(" ")[0].upper(), j2.split(" ")[0].upper()
                 
@@ -124,18 +101,18 @@ if s1_w == 3 or s2_w == 3:
                                 
                                 found = True
                                 sa, sv = (sc1, sc2) if n1 in row[1].upper() else (sc2, sc1)
-                                
                                 for k in range(len(sc1)):
                                     ws.update_cell(idx+1, 4+k, sa[k])
                                     ws.update_cell(v_idx+1, 4+k, sv[k])
                                 
-                                if link:
-                                    ws.update_cell(idx + 1, 16, link)
-                                    ws.update_cell(v_idx + 1, 16, link)
+                                # On stocke le code de la photo en colonne P
+                                if photo_data:
+                                    ws.update_cell(idx + 1, 16, photo_data)
+                                    ws.update_cell(v_idx + 1, 16, photo_data)
                                 
-                                flash("green"); st.success("✅ Match enregistré !"); break
+                                flash("green"); st.success("✅ Enregistré !"); break
                     if found: break
-                if not found: st.error("Match non trouvé dans le calendrier.")
+                if not found: st.error("Match non trouvé.")
         except Exception as e: st.error(f"Erreur : {e}")
 else:
-    st.info("ℹ️ Complétez 3 sets gagnants pour débloquer l'envoi.")
+    st.info("ℹ️ Complétez 3 sets gagnants.")

@@ -36,8 +36,8 @@ liste_joueurs = get_liste_joueurs()
 journee = st.selectbox("Sélectionnez la journée", [f"J{i}" for i in range(1, 10)])
 
 col1, col2 = st.columns(2)
-j1_select = col1.selectbox("Joueur 1 (Vainqueur)", liste_joueurs)
-j2_select = col2.selectbox("Joueur 2 (Perdant)", liste_joueurs)
+j1_select = col1.selectbox("Joueur 1", liste_joueurs)
+j2_select = col2.selectbox("Joueur 2", liste_joueurs)
 
 st.divider()
 
@@ -62,51 +62,55 @@ for i in range(1, 6):
         c3.error(msg)
 
 # 3. Validation et Envoi
-# On vérifie si l'un des deux joueurs a atteint 3 sets
-match_termine = (sets_j1 == 3 or (len(scores_j1) - sets_j1) == 3)
+jeux_j1 = sets_j1
+jeux_j2 = sum(1 for i in range(len(scores_j1)) if scores_j2[i] > scores_j1[i])
 
-if match_termine:
-    # On identifie qui est le vrai vainqueur pour l'affichage
-    vrai_vainqueur = j1_select if sets_j1 == 3 else j2_select
+if (jeux_j1 == 3 or jeux_j2 == 3):
+    vrai_vainqueur = j1_select if jeux_j1 == 3 else j2_select
     st.balloons()
-    st.success(f"Match terminé ! Victoire de {vrai_vainqueur}")
+    st.success(f"🏆 Victoire de {vrai_vainqueur} ({max(jeux_j1, jeux_j2)} - {min(jeux_j1, jeux_j2)})")
     
-    if st.button("Confirmer et envoyer au Google Sheet"):
+    if st.button("Confirmer et envoyer les scores"):
         try:
             ws = spreadsheet.worksheet(journee)
             all_cells = ws.get_all_values()
             trouve = False
             
-            # ... le reste du code de recherche (le "for idx, row in enumerate...") reste le même
-            
-            # On cherche le bloc des joueurs dans l'onglet Journée
+            # On cherche le match dans la colonne B (index 1)
             for idx, row in enumerate(all_cells):
-                # On cherche le NOM (souvent en majuscules dans tes feuilles J1, J2)
-                nom_j1_fiche = j1_select.split(" ")[0].upper()
-                nom_j2_fiche = j2_select.split(" ")[0].upper()
+                nom_j1 = j1_select.split(" ")[0].upper()
+                nom_j2 = j2_select.split(" ")[0].upper()
                 
-                if nom_j1_fiche in row[1] or nom_j2_fiche in row[1]:
-                    # On vérifie la ligne d'en dessous pour confirmer le match
-                    if nom_j1_fiche in all_cells[idx+1][1] or nom_j2_fiche in all_cells[idx+1][1]:
-                        
-                        # Déterminer quelle ligne appartient à qui
-                        row_top = idx + 1
-                        row_bottom = idx + 2
-                        idx_v = row_top if nom_j1_fiche in row[1] else row_bottom
-                        idx_p = row_bottom if idx_v == row_top else row_top
-                        
-                        # Remplissage des colonnes D, E, F, G, H (colonnes 4 à 8)
-                        for game_idx in range(len(scores_j1)):
-                            ws.update_cell(idx_v, 4 + game_idx, scores_j1[game_idx])
-                            ws.update_cell(idx_p, 4 + game_idx, scores_j2[game_idx])
+                # Si on trouve l'un des deux joueurs
+                if nom_j1 in row[1].upper() or nom_j2 in row[1].upper():
+                    # On vérifie si le voisin (ligne +1 ou -1) est l'adversaire
+                    # pour être sûr d'être dans le bon bloc de match
+                    voisin_index = idx + 1 if idx + 1 < len(all_cells) else idx - 1
+                    nom_voisin = all_cells[voisin_index][1].upper()
+                    
+                    if nom_j1 in nom_voisin or nom_j2 in nom_voisin:
+                        # ON A TROUVÉ LE MATCH !
+                        # On remplit la ligne actuelle (idx + 1 pour gspread)
+                        # en fonction du joueur qui occupe cette ligne précise
+                        if nom_j1 in row[1].upper():
+                            sc_ligne_actuelle = scores_j1
+                            sc_ligne_voisine = scores_j2
+                        else:
+                            sc_ligne_actuelle = scores_j2
+                            sc_ligne_voisine = scores_j1
+                            
+                        # Mise à jour des scores (Colonnes D à H -> index 4 à 8)
+                        for g_idx in range(len(scores_j1)):
+                            ws.update_cell(idx + 1, 4 + g_idx, sc_ligne_actuelle[g_idx])
+                            ws.update_cell(voisin_index + 1, 4 + g_idx, sc_ligne_voisine[g_idx])
                         
                         trouve = True
-                        st.success(f"✅ Match {j1_select} vs {j2_select} enregistré avec succès dans {journee} !")
+                        st.success("✅ Les scores ont été mis à jour dans ton fichier Excel !")
                         break
             
             if not trouve:
-                st.error("Match non trouvé dans cette journée. Vérifiez les noms.")
+                st.error("Match non trouvé dans cette journée. Vérifie les adversaires.")
         except Exception as e:
-            st.error(f"Erreur : {e}")
+            st.error(f"Erreur technique : {e}")
 else:
     st.info("Le bouton d'envoi apparaîtra une fois les 3 jeux gagnants saisis.")

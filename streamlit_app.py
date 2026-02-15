@@ -29,24 +29,33 @@ def up_drive(file, name):
     if not file: return ""
     try:
         svc = build('drive', 'v3', credentials=creds)
-        # On s'assure que le lien sera récupérable
-        meta = {'name': name, 'parents': [DRIVE_ID]}
+        # On définit les métadonnées : le fichier appartient au dossier parent
+        meta = {
+            'name': name, 
+            'parents': [DRIVE_ID]
+        }
         m = MediaIoBaseUpload(io.BytesIO(file.getvalue()), mimetype='image/jpeg')
-        res = svc.files().create(body=meta, media_body=m, fields='id, webViewLink', supportsAllDrives=True).execute()
+        
+        # Création du fichier SANS transfert de propriété
+        res = svc.files().create(
+            body=meta, 
+            media_body=m, 
+            fields='id, webViewLink',
+            supportsAllDrives=True # Très important
+        ).execute()
+        
         fid = res.get('id')
         
-        # Rendre le fichier accessible pour que le lien fonctionne dans le Sheets
-        perm = {'type': 'user', 'role': 'owner', 'emailAddress': 'bixente.barnetche@gmail.com'}
-        try:
-            svc.permissions().create(fileId=fid, body=perm, transferOwnership=True, supportsAllDrives=True).execute()
-        except:
-            svc.permissions().create(fileId=fid, body={'type': 'anyone', 'role': 'viewer'}, supportsAllDrives=True).execute()
+        # On rend juste le lien lisible pour que tu puisses cliquer dessus dans le Sheets
+        svc.permissions().create(
+            fileId=fid, 
+            body={'type': 'anyone', 'role': 'viewer'},
+            supportsAllDrives=True
+        ).execute()
         
-        # On récupère le lien final propre
-        final_file = svc.files().get(fileId=fid, fields='webViewLink', supportsAllDrives=True).execute()
-        return final_file.get('webViewLink')
+        return res.get('webViewLink')
     except Exception as e:
-        st.warning(f"Note : La photo n'a pas pu être envoyée ({e})")
+        st.error(f"Erreur Drive détaillée : {e}")
         return ""
 
 # --- APP ---
@@ -116,12 +125,10 @@ if s1_w == 3 or s2_w == 3:
                                 found = True
                                 sa, sv = (sc1, sc2) if n1 in row[1].upper() else (sc2, sc1)
                                 
-                                # Mise à jour des scores (Colonnes D, E, F, G, H)
                                 for k in range(len(sc1)):
                                     ws.update_cell(idx+1, 4+k, sa[k])
                                     ws.update_cell(v_idx+1, 4+k, sv[k])
                                 
-                                # Mise à jour de la photo en Colonne P (16)
                                 if link:
                                     ws.update_cell(idx + 1, 16, link)
                                     ws.update_cell(v_idx + 1, 16, link)

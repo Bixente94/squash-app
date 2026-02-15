@@ -62,13 +62,22 @@ for i in range(1, 6):
         c3.error(msg)
 
 # 3. Validation et Envoi
-if sets_j1 == 3:
+# On vérifie si l'un des deux joueurs a atteint 3 sets
+match_termine = (sets_j1 == 3 or (len(scores_j1) - sets_j1) == 3)
+
+if match_termine:
+    # On identifie qui est le vrai vainqueur pour l'affichage
+    vrai_vainqueur = j1_select if sets_j1 == 3 else j2_select
     st.balloons()
+    st.success(f"Match terminé ! Victoire de {vrai_vainqueur}")
+    
     if st.button("Confirmer et envoyer au Google Sheet"):
         try:
             ws = spreadsheet.worksheet(journee)
             all_cells = ws.get_all_values()
             trouve = False
+            
+            # ... le reste du code de recherche (le "for idx, row in enumerate...") reste le même
             
             # On cherche le bloc des joueurs dans l'onglet Journée
             for idx, row in enumerate(all_cells):

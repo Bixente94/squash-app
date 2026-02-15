@@ -58,7 +58,7 @@ for i in range(1, 6):
 
 st.divider()
 
-# 3. Calculs et Validation (On définit les variables ICI avant de les tester)
+# 3. Calculs et Validation
 jeux_j1 = sets_j1
 jeux_j2 = sum(1 for i in range(len(scores_j1)) if scores_j2[i] > scores_j1[i])
 
@@ -78,7 +78,7 @@ if (jeux_j1 == 3 or jeux_j2 == 3):
     if st.button("Confirmer et envoyer les scores"):
         try:
             match_trouve = False
-            with st.spinner('Recherche du match dans le calendrier...'):
+            with st.spinner('Vérification du calendrier...'):
                 for i in range(1, 10):
                     nom_onglet = f"J{i}"
                     ws = spreadsheet.worksheet(nom_onglet)
@@ -94,6 +94,17 @@ if (jeux_j1 == 3 or jeux_j2 == 3):
                             
                             if nom_j1 in nom_voisin or nom_j2 in nom_voisin:
                                 # MATCH TROUVÉ
+                                match_trouve = True
+                                
+                                # --- VÉRIFICATION STRICTE SI DÉJÀ REMPLI ---
+                                # On regarde si le premier set (colonne D / index 3) a déjà une valeur
+                                # (Si la case n'est pas vide et n'est pas un zéro)
+                                val_case = row[3].strip()
+                                if val_case != "" and val_case != "0":
+                                    st.error(f"❌ Erreur : Un score a déjà été enregistré pour ce match dans l'onglet {nom_onglet}. Veuillez contacter l'organisateur pour toute modification.")
+                                    st.stop()
+
+                                # --- PROCÉDURE D'ENVOI ---
                                 if nom_j1 in row[1].upper():
                                     sc_ligne_actuelle, sc_ligne_voisine = scores_j1, scores_j2
                                 else:
@@ -104,7 +115,6 @@ if (jeux_j1 == 3 or jeux_j2 == 3):
                                     ws.update_cell(voisin_index + 1, 4 + g_idx, sc_ligne_voisine[g_idx])
                                 
                                 st.success(f"✅ Enregistré avec succès dans l'onglet **{nom_onglet}** !")
-                                match_trouve = True
                                 break
                     if match_trouve: break
 

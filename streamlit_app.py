@@ -104,9 +104,4 @@ st.divider()
 
 # CALCUL DES RÉSULTATS
 jeux_j1 = sets_j1
-jeux_j2 = sum(1 for i in range(len(scores_j1)) if scores_j2[i] > scores_j1[i])
-
-if (jeux_j1 == 3 or jeux_j2 == 3):
-    vrai_vainqueur = j1_select if jeux_j1 == 3 else j2_select
-    
-    st.write("###
+jeux_j2 = sum(1 for i in range(len(scores_j

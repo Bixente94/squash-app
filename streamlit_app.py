@@ -75,7 +75,7 @@ if (jeux_j1 == 3 or jeux_j2 == 3):
     st.table(recap_data)
     st.info(f"Résultat final : **{jeux_j1} - {jeux_j2}** pour **{vrai_vainqueur}**")
 
-    if st.button("Confirmer et envoyer les scores"):
+   if st.button("Confirmer et envoyer les scores"):
         try:
             match_trouve = False
             # Recherche automatique dans les onglets J1 à J9
@@ -89,18 +89,13 @@ if (jeux_j1 == 3 or jeux_j2 == 3):
                         nom_j1 = j1_select.split(" ")[0].upper()
                         nom_j2 = j2_select.split(" ")[0].upper()
                         
-                        # On vérifie si les deux joueurs sont sur deux lignes consécutives
+                        # On vérifie si l'un des joueurs est sur cette ligne
                         if nom_j1 in row[1].upper() or nom_j2 in row[1].upper():
                             voisin_index = idx + 1 if idx + 1 < len(all_cells) else idx - 1
                             nom_voisin = all_cells[voisin_index][1].upper()
                             
                             if nom_j1 in nom_voisin or nom_j2 in nom_voisin:
                                 # MATCH TROUVÉ
-                                # Vérification si déjà rempli (colonne D / index 3)
-                                if row[3] and row[3] != "0" and row[3] != "":
-                                    st.warning(f"⚠️ Déjà un score pour ce match en {nom_onglet}.")
-                                
-                                # Attribution des lignes
                                 if nom_j1 in row[1].upper():
                                     sc_ligne_actuelle, sc_ligne_voisine = scores_j1, scores_j2
                                 else:
@@ -110,3 +105,15 @@ if (jeux_j1 == 3 or jeux_j2 == 3):
                                 for g_idx in range(len(scores_j1)):
                                     ws.update_cell(idx + 1, 4 + g_idx, sc_ligne_actuelle[g_idx])
                                     ws.update_cell(voisin_index + 1, 4 + g_idx, sc_ligne_voisine[g_idx])
+                                
+                                st.success(f"✅ Enregistré avec succès dans l'onglet **{nom_onglet}** !")
+                                match_trouve = True
+                                break
+                    if match_trouve: break
+
+            if not match_trouve:
+                st.error("Impossible de trouver ce match dans les journées J1 à J9.")
+        except Exception as e:
+            st.error(f"Erreur technique : {e}")
+else:
+    st.info("Le bouton d'envoi apparaîtra une fois que l'un des joueurs aura gagné 3 sets.")

@@ -2,7 +2,6 @@ import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 import base64
-from datetime import datetime
 from PIL import Image
 import io
 
@@ -27,16 +26,17 @@ def flash(color):
 def encode_photo(file):
     if not file: return ""
     try:
-        # On réduit la taille de l'image pour ne pas faire exploser le Sheets (limite 50k caractères)
         img = Image.open(file)
-        img.thumbnail((400, 400)) # On compresse en petit format
-        buffered = io.BytesIO()
-        img.save(buffered, format="JPEG", quality=60)
-        return base64.b64encode(buffered.getvalue()).decode()
-    except: return "Erreur encodage"
+        # Compression pour ne pas dépasser la limite de 50 000 caractères par cellule
+        img.thumbnail((350, 350)) 
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=50) 
+        return base64.b64encode(buf.getvalue()).decode()
+    except: return ""
 
 # --- APP ---
 st.title("🏆 Scores Squash")
+
 ws_c = ss.worksheet("COORDONNEES")
 joueurs = [f"{r[0]} {r[1]}" for r in ws_c.get_all_values()[2:] if r[0]]
 
@@ -59,32 +59,30 @@ for i in range(1, 6):
     v2 = l2.number_input(f"Set {i} bis", 0, 30, 0, key=f"v2_{i}", label_visibility="collapsed")
     
     diff = abs(v1 - v2)
-    valid_set = False
-    if (v1 == 11 or v2 == 11) and diff >= 2: valid_set = True
-    elif (v1 > 11 or v2 > 11) and diff == 2: valid_set = True
+    valid = ((v1==11 or v2==11) and diff>=2) or ((v1>11 or v2>11) and diff==2)
         
-    if valid_set:
+    if valid:
         l3.markdown("### ✅")
         sc1.append(v1); sc2.append(v2)
         if v1 > v2: s1_w += 1
         else: s2_w += 1
-    elif v1 > 0 or v2 > 0: l3.markdown("### ⏳")
+    elif v1 > 0 or v2 > 0: 
+        l3.markdown("### ⏳")
 
 st.divider()
-img_file = st.file_uploader("📸 Photo (Optionnel - Stockée dans le Sheets)", type=['jpg', 'png', 'jpeg'])
+img_file = st.file_uploader("📸 Photo de la feuille (Optionnel)", type=['jpg', 'png', 'jpeg'])
 
 if s1_w == 3 or s2_w == 3:
     st.write("#### 🔍 Récapitulatif")
-    recap_dict = {"Set": [f"Set {k+1}" for k in range(len(sc1))], j1: sc1, j2: sc2}
-    st.table(recap_dict)
+    st.table({"Set": [f"Set {k+1}" for k in range(len(sc1))], j1: sc1, j2: sc2})
     
     win = j1 if s1_w == 3 else j2
-    st.success(f"🏆 Victoire de **{win}** ({max(s1_w, s2_w)}-{min(s1_w, s2_w)})")
+    st.success(f"🏆 Victoire de **{win}** par **{max(s1_w, s2_w)}** sets à **{min(s1_w, s2_w)}**")
 
     if st.button("🚀 ENVOYER LE SCORE FINAL"):
         try:
             with st.spinner('Enregistrement...'):
-                photo_data = encode_photo(img_file)
+                photo_txt = encode_photo(img_file)
                 found = False
                 n1, n2 = j1.split(" ")[0].upper(), j2.split(" ")[0].upper()
                 
@@ -94,8 +92,7 @@ if s1_w == 3 or s2_w == 3:
                     for idx, row in enumerate(data):
                         if n1 in row[1].upper() or n2 in row[1].upper():
                             v_idx = idx + 1 if (idx % 2 != 0) else idx - 1
-                            if v_idx < 0 or v_idx >= len(data): continue
-                            if n1 in data[v_idx][1].upper() or n2 in data[v_idx][1].upper():
+                            if v_idx < len(data) and (n1 in data[v_idx][1].upper() or n2 in data[v_idx][1].upper()):
                                 if row[3].strip() not in ["", "0"]:
                                     flash("red"); st.error("❌ Déjà rempli !"); st.stop()
                                 
@@ -105,14 +102,13 @@ if s1_w == 3 or s2_w == 3:
                                     ws.update_cell(idx+1, 4+k, sa[k])
                                     ws.update_cell(v_idx+1, 4+k, sv[k])
                                 
-                                # On stocke le code de la photo en colonne P
-                                if photo_data:
-                                    ws.update_cell(idx + 1, 16, photo_data)
-                                    ws.update_cell(v_idx + 1, 16, photo_data)
+                                if photo_txt:
+                                    ws.update_cell(idx + 1, 16, photo_txt)
+                                    ws.update_cell(v_idx + 1, 16, photo_txt)
                                 
-                                flash("green"); st.success("✅ Enregistré !"); break
+                                flash("green"); st.success("✅ Match enregistré !"); break
                     if found: break
-                if not found: st.error("Match non trouvé.")
+                if not found: st.error("Match non trouvé dans le calendrier.")
         except Exception as e: st.error(f"Erreur : {e}")
 else:
-    st.info("ℹ️ Complétez 3 sets gagnants.")
+    st.info("ℹ️ Complétez 3 sets gagnants pour débloquer l'envoi.")
